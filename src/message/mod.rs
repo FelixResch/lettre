@@ -500,6 +500,10 @@ impl Message {
         out
     }
 
+    pub fn set_dsn_config(&mut self, dsn_config: DsnConfig) {
+        self.envelope.set_dsn_config(Some(dsn_config));
+    }
+
     #[cfg(feature = "dkim")]
     /// Format body for signing
     pub(crate) fn body_raw(&self) -> Vec<u8> {
