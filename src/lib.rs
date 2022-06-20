@@ -254,7 +254,7 @@ mod test {
             Envelope::try_from(&headers).unwrap(),
             Envelope::new(
                 Some(Address::new("kayo", "example.com").unwrap()),
-                vec![Address::new("amousset", "example.com").unwrap()]
+                vec![Address::new("amousset", "example.com").unwrap()],
             )
             .unwrap()
         );
@@ -275,7 +275,7 @@ mod test {
             Envelope::try_from(&headers).unwrap(),
             Envelope::new(
                 Some(Address::new("kayo2", "example.com").unwrap()),
-                vec![Address::new("amousset", "example.com").unwrap()]
+                vec![Address::new("amousset", "example.com").unwrap()],
             )
             .unwrap()
         );

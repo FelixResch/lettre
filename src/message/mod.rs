@@ -214,7 +214,7 @@ mod mailbox;
 mod mimebody;
 
 use crate::{
-    address::Envelope,
+    address::{Envelope, DsnConfig},
     message::header::{ContentTransferEncoding, Header, Headers, MailboxesHeader},
     Error as EmailError,
 };
@@ -232,6 +232,7 @@ trait EmailFormat {
 pub struct MessageBuilder {
     headers: Headers,
     envelope: Option<Envelope>,
+    dsn_config: Option<DsnConfig>,
 }
 
 impl MessageBuilder {
@@ -240,6 +241,7 @@ impl MessageBuilder {
         Self {
             headers: Headers::new(),
             envelope: None,
+            dsn_config: None,
         }
     }
 
@@ -376,9 +378,8 @@ impl MessageBuilder {
         }
     }
 
-    /// Force specific envelope (by default it is derived from headers)
-    pub fn envelope(mut self, envelope: Envelope) -> Self {
-        self.envelope = Some(envelope);
+    pub fn dsn_config(mut self, dsn_config: DsnConfig) -> Self {
+        self.dsn_config = Some(dsn_config);
         self
     }
 
@@ -411,7 +412,11 @@ impl MessageBuilder {
 
         let envelope = match res.envelope {
             Some(e) => e,
-            None => Envelope::try_from(&res.headers)?,
+            None => {
+                let mut envelope = Envelope::try_from(&res.headers)?;
+                envelope.set_dsn_config(res.dsn_config);
+                envelope
+            },
         };
 
         // Remove `Bcc` headers now the envelope is set

@@ -1,18 +1,16 @@
 //! ESMTP features
 
-use std::{
-    collections::HashSet,
-    fmt::{self, Display, Formatter},
-    net::{Ipv4Addr, Ipv6Addr},
-    result::Result,
-};
-
+use std::collections::HashSet;
+use std::fmt;
+use std::fmt::{Display, Formatter};
+use std::net::{Ipv4Addr, Ipv6Addr};
 use crate::transport::smtp::{
     authentication::Mechanism,
     error::{self, Error},
     response::Response,
     util::XText,
 };
+use crate::Address;
 
 /// Client identifier, the parameter to `EHLO`
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -89,6 +87,10 @@ pub enum Extension {
     StartTls,
     /// AUTH mechanism
     Authentication(Mechanism),
+    /// Delivery Status Notifications
+    ///
+    /// Defined in [RFC 3461](https://tools.ietf.org/html/rfc3461)
+    DeliveryStatusNotification,
 }
 
 impl Display for Extension {
@@ -98,6 +100,7 @@ impl Display for Extension {
             Extension::SmtpUtfEight => f.write_str("SMTPUTF8"),
             Extension::StartTls => f.write_str("STARTTLS"),
             Extension::Authentication(ref mechanism) => write!(f, "AUTH {}", mechanism),
+            Extension::DeliveryStatusNotification => f.write_str("DSN"),
         }
     }
 }
@@ -169,6 +172,9 @@ impl ServerInfo {
                         }
                     }
                 }
+                "DSN" => {
+                    features.insert(Extension::DeliveryStatusNotification);
+                }
                 _ => (),
             };
         }
@@ -216,6 +222,10 @@ pub enum MailParameter {
     Size(usize),
     /// `SMTPUTF8` parameter
     SmtpUtfEight,
+    /// `RET` parameter
+    Ret(RetParameter),
+    /// `ENVID` parameter
+    EnvelopeIdentifier(String),
     /// Custom parameter
     Other {
         /// Parameter keyword
@@ -239,6 +249,10 @@ impl Display for MailParameter {
                 ref keyword,
                 value: None,
             } => f.write_str(keyword),
+            MailParameter::Ret(ref value) => write!(f, "RET={}", value),
+            MailParameter::EnvelopeIdentifier(ref identifier) => {
+                write!(f, "ENVID={}", XText(identifier))
+            }
         }
     }
 }
@@ -262,10 +276,33 @@ impl Display for MailBodyParameter {
     }
 }
 
+/// Values for the `RET` parameter to `MAIL`
+#[derive(PartialEq, Eq, Clone, Debug, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum RetParameter {
+    /// Requests that the entire message be returned in any "failed" Delivery Status Notification issued for this recipient.
+    Full,
+    /// Requests that only the headers of the message be returned.
+    Headers,
+}
+
+impl Display for RetParameter {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match *self {
+            RetParameter::Full => f.write_str("FULL"),
+            RetParameter::Headers => f.write_str("HDRS"),
+        }
+    }
+}
+
 /// A `RCPT TO` extension parameter
 #[derive(PartialEq, Eq, Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum RcptParameter {
+    /// `NOTIFY` parameter
+    Notify(NotifyParameter),
+    /// `ORCPT` parameter
+    OriginalRecipient(Address),
     /// Custom parameter
     Other {
         /// Parameter keyword
@@ -286,6 +323,58 @@ impl Display for RcptParameter {
                 ref keyword,
                 value: None,
             } => f.write_str(keyword),
+            RcptParameter::Notify(ref value) => write!(f, "NOTIFY={}", value),
+            RcptParameter::OriginalRecipient(ref value) => write!(f, "ORCPT=rfc822;{}", value),
+        }
+    }
+}
+
+/// Values for the `NOTIFY` parameter
+#[derive(PartialEq, Eq, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum NotifyParameter {
+    /// `NEVER` value, never send a DSN
+    Never,
+    /// List of possible events when a DSN can be generated
+    List(Vec<NotifyOn>),
+}
+
+impl Display for NotifyParameter {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match *self {
+            NotifyParameter::Never => f.write_str("NEVER"),
+            NotifyParameter::List(ref elements) => {
+                for (index, element) in elements.iter().enumerate() {
+                    if index < elements.len() - 1 {
+                        write!(f, "{},", element)?;
+                    } else {
+                        write!(f, "{}", element)?;
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+/// Value to be used for a notify parameter
+#[derive(PartialEq, Eq, Clone, Debug, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum NotifyOn {
+    /// `SUCCESS` value, request a notification when the message has been delivered successfully
+    Success,
+    /// `FAILURE`, request a notification when there was a failure when delivering the message
+    Failure,
+    /// `DELAY`, request a notification when delivery of a message is delayed
+    Delay,
+}
+
+impl Display for NotifyOn {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match *self {
+            NotifyOn::Success => f.write_str("SUCCESS"),
+            NotifyOn::Failure => f.write_str("FAILURE"),
+            NotifyOn::Delay => f.write_str("DELAY"),
         }
     }
 }

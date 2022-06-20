@@ -8,6 +8,7 @@ use std::{
 #[cfg(feature = "tracing")]
 use super::escape_crlf;
 use super::{ClientCodec, NetworkStream, TlsParameters};
+use crate::transport::smtp::extension::RcptParameter;
 use crate::{
     address::Envelope,
     transport::smtp::{
@@ -109,6 +110,18 @@ impl SmtpConnection {
             mail_options.push(MailParameter::Body(MailBodyParameter::EightBitMime));
         }
 
+        #[cfg(feature = "delivery-status-notification")]
+        if self
+            .server_info
+            .supports_feature(Extension::DeliveryStatusNotification)
+        {
+            if let Some(dsn_config) = envelope.dsn_config() {
+                mail_options.push(MailParameter::Ret(dsn_config.ret().into()));
+                mail_options.push(MailParameter::EnvelopeIdentifier(dsn_config.envelope_id().to_string()));
+            }
+
+        }
+
         try_smtp!(
             self.command(Mail::new(envelope.from().cloned(), mail_options)),
             self
@@ -116,7 +129,33 @@ impl SmtpConnection {
 
         // Recipient
         for to_address in envelope.to() {
-            try_smtp!(self.command(Rcpt::new(to_address.clone(), vec![])), self);
+            #[cfg(feature = "delivery-status-notification")]
+            let rcpt_options = if self
+                .server_info
+                .supports_feature(Extension::DeliveryStatusNotification)
+            {
+                if let Some(dsn_config) = envelope.dsn_config() {
+                    vec![
+                        RcptParameter::Notify(dsn_config.notify_parameter()),
+                        RcptParameter::OriginalRecipient(to_address.clone()),
+                    ]
+                } else {
+                    vec![]
+                }
+            } else {
+                vec![]
+            };
+            #[cfg(not(feature = "delivery-status-notification"))]
+            let rcpt_options = vec![];
+            try_smtp!(
+                self.command(
+                    Rcpt::new(
+                        to_address.clone(),
+                        rcpt_options,
+                    )
+                ),
+                self
+            );
         }
 
         // Data

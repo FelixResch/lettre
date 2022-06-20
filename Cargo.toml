@@ -109,6 +109,7 @@ async-std1-rustls-tls = ["async-std1", "rustls-tls", "futures-rustls"]
 tokio1 = ["tokio1_crate", "async-trait", "futures-io", "futures-util"]
 tokio1-native-tls = ["tokio1", "native-tls", "tokio1_native_tls_crate"]
 tokio1-rustls-tls = ["tokio1", "rustls-tls", "tokio1_rustls"]
+delivery-status-notification = []
 
 dkim = ["base64", "sha2", "rsa", "ed25519-dalek", "regex", "once_cell"]
 

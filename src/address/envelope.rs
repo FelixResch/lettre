@@ -1,3 +1,4 @@
+use crate::address::dsn_config::DsnConfig;
 use super::Address;
 #[cfg(feature = "builder")]
 use crate::message::header::{self, Headers};
@@ -17,6 +18,8 @@ pub struct Envelope {
     forward_path: Vec<Address>,
     /// The envelope sender address
     reverse_path: Option<Address>,
+    #[cfg(feature = "delivery-status-notification")]
+    dsn_config: Option<DsnConfig>,
 }
 
 impl Envelope {
@@ -39,13 +42,18 @@ impl Envelope {
     /// # Errors
     ///
     /// If `to` has no elements in it.
-    pub fn new(from: Option<Address>, to: Vec<Address>) -> Result<Envelope, Error> {
+    pub fn new(
+        from: Option<Address>,
+        to: Vec<Address>,
+    ) -> Result<Envelope, Error> {
         if to.is_empty() {
             return Err(Error::MissingTo);
         }
         Ok(Envelope {
             forward_path: to,
             reverse_path: from,
+            #[cfg(feature = "delivery-status-notification")]
+            dsn_config: None,
         })
     }
 
@@ -99,6 +107,13 @@ impl Envelope {
             .iter()
             .chain(self.forward_path.iter())
             .any(|a| !a.is_ascii())
+    }
+    #[cfg(feature = "delivery-status-notification")]
+    pub(crate) fn dsn_config(&self) -> Option<&DsnConfig> {
+        self.dsn_config.as_ref()
+    }
+    pub(crate) fn set_dsn_config(&mut self, dsn_config: Option<DsnConfig>) {
+        self.dsn_config = dsn_config;
     }
 }
 
